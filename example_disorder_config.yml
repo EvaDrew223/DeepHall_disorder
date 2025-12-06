@@ -1,0 +1,65 @@
+# Example configuration file for running DeepHall with disorder
+# Usage: python -m deephall.train --yml example_disorder_config.yml
+
+# System configuration
+system:
+  flux: 4                          # 2Q (monopole strength)
+  nspins: [3, 0]                   # [spin_up, spin_down] electrons
+  interaction_type: coulomb        # coulomb or harmonic
+  interaction_strength: 1.0        # Factor for potential energy
+  
+  # Disorder configuration
+  disorder:
+    n_dis: 10                      # Number of impurities (0 to disable), does not have to be even
+    disorder_separation: 0.5       # Distance d between electron and donor shells, in unit of magnetic length
+    max_disorder_charge: 1.0       # Maximum magnitude of impurity charges
+    disorder_strength: 1.0         # Overall multiplicative factor that scales the entire disorder potential
+    disorder_seed: 42              # Random seed for reproducibility (null for random)
+
+# Network configuration
+network:
+  type: psiformer                  # psiformer, laughlin, or free
+  orbital: full                    # full or sparse
+  psiformer:
+    num_heads: 4                   # Number of attention heads
+    heads_dim: 64                  # Dimension per head
+    num_layers: 2                  # Number of transformer layers
+    determinants: 1                # Number of determinants
+
+# MCMC sampling configuration
+mcmc:
+  steps: 10                        # MCMC steps between optimization steps
+  width: 0.1                       # Step size (std dev for Gaussian moves)
+  burn_in: 200                     # Burn-in steps (multiplied by mcmc.steps)
+  adapt_frequency: 100             # Steps between width adaptations
+
+# Optimization configuration
+optim:
+  iterations: 1000                 # Total optimization iterations
+  optimizer: kfac                  # kfac, adam, or none (for inference)
+  
+  # KFAC optimizer settings
+  kfac:
+    lr:
+      rate: 0.05                   # Learning rate
+      decay: 1.0                   # Decay power
+      delay: 2000.0                # Decay delay
+  
+  # Adam optimizer settings (if optimizer: adam)
+  adam:
+    lr:
+      rate: 0.005
+      decay: 1.0
+      delay: 2000.0
+
+# Logging configuration
+log:
+  save_path: null                  # Path to save results (null for auto-generated)
+  restore_path: null               # Path to restore checkpoint (null for fresh start)
+  save_time_interval: 600          # Min seconds between checkpoint saves (10 min)
+  save_step_interval: 1000         # Save only at multiples of this step
+  initial_energy: true             # Log initial energy before training
+
+# Training configuration
+batch_size: 3360                   # Number of electron configurations
+seed: null                         # Global random seed (null for current time)
