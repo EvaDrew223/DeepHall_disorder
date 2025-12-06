@@ -102,10 +102,10 @@ def compute_disorder_potential(
     R_d = impurity_config.donor_radius
     distance = jnp.sqrt(r**2 + R_d**2 - 2 * r * R_d * cos_gamma)
 
-    # Potential: sum_i sum_a (z_a / distance_ia)
+    # Potential: sum_i sum_a (-z_a / distance_ia) because electron has charge -e
     # z_a are the impurity charges (in units of e)
     charges = impurity_config.charges  # shape: (n_dis,)
-    potential_per_electron = jnp.sum(charges / distance, axis=-1)  # (..., nelec)
+    potential_per_electron = -jnp.sum(charges / distance, axis=-1)  # (..., nelec)
     total_potential = jnp.sum(potential_per_electron)  # scalar
 
     # Normalize by radius to match energy units of Coulomb interaction

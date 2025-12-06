@@ -24,11 +24,16 @@ from upath import UPath
 
 from deephall import constants
 from deephall.config import Config
-from deephall.hamiltonian import make_local_kinetic_energy, make_potential
+from deephall.hamiltonian import (
+    compute_disorder_potential,
+    make_local_kinetic_energy,
+    make_potential,
+)
 from deephall.log import LogManager
 from deephall.mcmc import make_mcmc_step
 from deephall.netobs_bridge.hall_system import HallSystem
 from deephall.networks import make_network
+from deephall.types import ImpurityConfiguration
 
 
 class DeepHallAuxData(TypedDict):
@@ -48,13 +53,27 @@ class DeepHallAdaptor(NetworkAdaptor[HallSystem]): # inherits from NetworkAdapto
         ckpt_path = UPath(ckpt_file)
         config_path = ckpt_path.parent / "config.yml"
         self.cfg = cfg = Config.from_dict(OmegaConf.load(config_path.open()))  # type: ignore
-        model = make_network(cfg.system, cfg.network)
+
+        # Load disorder configuration if available
+        self.impurity_config = None
+        disorder_path = ckpt_path.parent / "disorder_config.npz"
+        if disorder_path.exists():
+            disorder_data = jnp.load(disorder_path)
+            self.impurity_config = ImpurityConfiguration(
+                n_dis=int(disorder_data["n_dis"]),
+                positions=jnp.array(disorder_data["positions"]),
+                charges=jnp.array(disorder_data["charges"]),
+                donor_radius=float(disorder_data["donor_radius"]),
+            )
+
+        model = make_network(cfg.system, cfg.network, impurity_config=self.impurity_config)
         self.network = jax.jit(model.apply)
         self.batch_per_device = cfg.batch_size // jax.device_count()
         Q = cfg.system.flux / 2
         radius = jnp.array(cfg.system.radius or jnp.sqrt(Q))
         self.kinetic_energy = make_local_kinetic_energy(self.network, Q, radius)
         self.potential_energy = make_potential(cfg.system.interaction_type, Q, radius)
+        self.radius = radius  # Save for disorder potential calculation
         _, state = LogManager.restore_checkpoint(ckpt_path)
 
         return (
@@ -109,7 +128,13 @@ class DeepHallAdaptor(NetworkAdaptor[HallSystem]): # inherits from NetworkAdapto
         system: HallSystem,
     ) -> jnp.ndarray:
         del params, system, key
-        return self.potential_energy(electrons) * self.cfg.system.interaction_strength
+        coulomb = self.potential_energy(electrons) * self.cfg.system.interaction_strength
+        if self.impurity_config is None:
+            return coulomb
+        disorder = compute_disorder_potential(
+            electrons, self.impurity_config, self.radius
+        )
+        return coulomb + disorder
 
 
 DEFAULT = DeepHallAdaptor
